@@ -1,0 +1,173 @@
+# Mini-SOC : Suricata (IDS) -> Filebeat -> Elasticsearch -> Kibana / Grafana
+#            + Fail2Ban (réponse active / IPS)
+# Démarrage : cp .env.example .env && docker compose up -d
+# Grafana (optionnel) : docker compose --profile grafana up -d
+
+services:
+  # --- 1. Génère l'autorité de certification et les certificats TLS ----------
+  setup:
+    image: docker.elastic.co/elasticsearch/elasticsearch:${STACK_VERSION}
+    volumes:
+      - certs:/usr/share/elasticsearch/config/certs
+    user: "0"
+    environment:
+      - ELASTIC_PASSWORD=${ELASTIC_PASSWORD}
+      - KIBANA_PASSWORD=${KIBANA_PASSWORD}
+    command: >
+      bash -c '
+        set -e;
+        if [ ! -f config/certs/ca.zip ]; then
+          echo "Création de l autorité de certification";
+          bin/elasticsearch-certutil ca --silent --pem -out config/certs/ca.zip;
+          unzip -o config/certs/ca.zip -d config/certs;
+        fi;
+        if [ ! -f config/certs/certs.zip ]; then
+          echo "Création des certificats";
+          printf "instances:\n  - name: es01\n    dns: [es01, localhost]\n    ip: [127.0.0.1]\n" > config/certs/instances.yml;
+          bin/elasticsearch-certutil cert --silent --pem -out config/certs/certs.zip --in config/certs/instances.yml --ca-cert config/certs/ca/ca.crt --ca-key config/certs/ca/ca.key;
+          unzip -o config/certs/certs.zip -d config/certs;
+        fi;
+        chown -R root:root config/certs;
+        find config/certs -type d -exec chmod 750 {} \;;
+        find config/certs -type f -exec chmod 640 {} \;;
+        echo "Attente d Elasticsearch";
+        until curl -s --cacert config/certs/ca/ca.crt https://es01:9200 | grep -q "missing authentication credentials"; do sleep 10; done;
+        echo "Définition du mot de passe kibana_system";
+        until curl -s -X POST --cacert config/certs/ca/ca.crt -u "elastic:${ELASTIC_PASSWORD}" -H "Content-Type: application/json" https://es01:9200/_security/user/kibana_system/_password -d "{\"password\":\"${KIBANA_PASSWORD}\"}" | grep -q "^{}"; do sleep 10; done;
+        echo "Initialisation terminée";
+      '
+    healthcheck:
+      test: ["CMD-SHELL", "[ -f config/certs/es01/es01.crt ]"]
+      interval: 1s
+      timeout: 5s
+      retries: 120
+
+  # --- 2. Elasticsearch : stockage et recherche des événements ----------------
+  es01:
+    depends_on:
+      setup:
+        condition: service_healthy
+    image: docker.elastic.co/elasticsearch/elasticsearch:${STACK_VERSION}
+    volumes:
+      - certs:/usr/share/elasticsearch/config/certs
+      - esdata01:/usr/share/elasticsearch/data
+    ports:
+      - ${ES_PORT}:9200
+    environment:
+      - node.name=es01
+      - cluster.name=${CLUSTER_NAME}
+      - discovery.type=single-node
+      - ELASTIC_PASSWORD=${ELASTIC_PASSWORD}
+      - bootstrap.memory_lock=true
+      - xpack.security.enabled=true
+      - xpack.security.http.ssl.enabled=true
+      - xpack.security.http.ssl.key=certs/es01/es01.key
+      - xpack.security.http.ssl.certificate=certs/es01/es01.crt
+      - xpack.security.http.ssl.certificate_authorities=certs/ca/ca.crt
+      - xpack.security.transport.ssl.enabled=true
+      - xpack.security.transport.ssl.key=certs/es01/es01.key
+      - xpack.security.transport.ssl.certificate=certs/es01/es01.crt
+      - xpack.security.transport.ssl.certificate_authorities=certs/ca/ca.crt
+      - xpack.security.transport.ssl.verification_mode=certificate
+      - xpack.license.self_generated.type=basic
+    mem_limit: ${MEM_LIMIT}
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s --cacert config/certs/ca/ca.crt https://localhost:9200 | grep -q 'missing authentication credentials'"]
+      interval: 10s
+      timeout: 10s
+      retries: 120
+
+  # --- 3. Kibana : investigation et tableaux de bord --------------------------
+  kibana:
+    depends_on:
+      es01:
+        condition: service_healthy
+    image: docker.elastic.co/kibana/kibana:${STACK_VERSION}
+    volumes:
+      - certs:/usr/share/kibana/config/certs
+      - kibanadata:/usr/share/kibana/data
+    ports:
+      - ${KIBANA_PORT}:5601
+    environment:
+      - SERVERNAME=kibana
+      - ELASTICSEARCH_HOSTS=https://es01:9200
+      - ELASTICSEARCH_USERNAME=kibana_system
+      - ELASTICSEARCH_PASSWORD=${KIBANA_PASSWORD}
+      - ELASTICSEARCH_SSL_CERTIFICATEAUTHORITIES=config/certs/ca/ca.crt
+      - XPACK_SECURITY_ENCRYPTIONKEY=${KIBANA_ENCRYPTION_KEY}
+      - XPACK_ENCRYPTEDSAVEDOBJECTS_ENCRYPTIONKEY=${KIBANA_ENCRYPTION_KEY}
+    mem_limit: ${MEM_LIMIT}
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s -I http://localhost:5601 | grep -q 'HTTP/1.1 302 Found'"]
+      interval: 10s
+      timeout: 10s
+      retries: 120
+
+  # --- 4. Suricata : sonde IDS en écoute sur l'interface réseau ---------------
+  suricata:
+    image: jasonish/suricata:7.0
+    network_mode: host
+    cap_add: [NET_ADMIN, NET_RAW, SYS_NICE]
+    command: >
+      -i ${SURICATA_IFACE}
+      --set vars.address-groups.HOME_NET=${HOME_NET}
+      -S /etc/suricata/rules/local.rules
+    volumes:
+      - ./suricata/rules:/etc/suricata/rules:ro
+      - suricata-logs:/var/log/suricata
+    restart: unless-stopped
+
+  # --- 5. Filebeat : collecte et envoi de eve.json vers Elasticsearch ---------
+  filebeat:
+    depends_on:
+      kibana:
+        condition: service_healthy
+    image: docker.elastic.co/beats/filebeat:${STACK_VERSION}
+    user: root
+    command: ["filebeat", "-e", "--strict.perms=false"]
+    volumes:
+      - ./filebeat/filebeat.yml:/usr/share/filebeat/filebeat.yml:ro
+      - certs:/usr/share/filebeat/certs:ro
+      - suricata-logs:/var/log/suricata:ro
+    environment:
+      - ELASTIC_PASSWORD=${ELASTIC_PASSWORD}
+    restart: unless-stopped
+
+  # --- 6. Fail2Ban : bannissement automatique des sources malveillantes -------
+  fail2ban:
+    image: crazymax/fail2ban:1.1.0
+    network_mode: host
+    cap_add: [NET_ADMIN, NET_RAW]
+    volumes:
+      - ./fail2ban:/data
+      - suricata-logs:/var/log/suricata:ro
+    environment:
+      - TZ=Europe/Paris
+      - F2B_LOG_TARGET=STDOUT
+    restart: unless-stopped
+
+  # --- 7. Grafana (optionnel) : vue de synthèse pour le management ------------
+  grafana:
+    profiles: [grafana]
+    depends_on:
+      es01:
+        condition: service_healthy
+    image: grafana/grafana:11.3.0
+    ports:
+      - ${GRAFANA_PORT}:3000
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - certs:/etc/grafana/certs:ro
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}
+      - ELASTIC_PASSWORD=${ELASTIC_PASSWORD}
+
+volumes:
+  certs:
+  esdata01:
+  kibanadata:
+  suricata-logs:

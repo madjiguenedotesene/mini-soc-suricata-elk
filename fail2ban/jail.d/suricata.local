@@ -1,0 +1,23 @@
+# Fail2Ban – prison « suricata » : réponse active (IPS) aux alertes de l'IDS
+
+[suricata]
+enabled   = true
+filter    = suricata-alert
+logpath   = /var/log/suricata/eve.json
+backend   = polling
+
+# 3 alertes graves en 10 minutes => bannissement
+maxretry  = 3
+findtime  = 10m
+bantime   = 1h
+
+# Récidive : la durée de bannissement double à chaque nouvelle infraction (max 1 semaine)
+bantime.increment = true
+bantime.factor    = 2
+bantime.maxtime   = 1w
+
+# Ne jamais bannir l'infrastructure du SOC ni le réseau d'administration
+ignoreip  = 127.0.0.1/8 ::1 10.10.0.1 10.10.0.5
+
+# Blocage de tous les ports de l'attaquant dans le pare-feu
+action    = iptables-allports[name=suricata, protocol=all]

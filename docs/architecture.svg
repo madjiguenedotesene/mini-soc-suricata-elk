@@ -1,0 +1,88 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 450" width="1100" height="450" font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#52514e"/>
+    </marker>
+    <marker id="arr-red" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#c62828"/>
+    </marker>
+    <style>
+      .box{fill:#ffffff;stroke:#d6d4ce;stroke-width:1.5;rx:12}
+      .t{font-size:15px;font-weight:700;fill:#0b0b0b}
+      .s{font-size:12px;fill:#52514e}
+      .lbl{font-size:12px;fill:#52514e}
+      .zone{font-size:12px;font-weight:700;letter-spacing:1.2px;fill:#7a786f}
+      .flow{stroke:#52514e;stroke-width:2;fill:none;marker-end:url(#arr)}
+      .ban{stroke:#c62828;stroke-width:2;fill:none;stroke-dasharray:6 4;marker-end:url(#arr-red)}
+    </style>
+  </defs>
+
+  <rect width="1100" height="450" fill="#fcfcfb"/>
+  <text x="40" y="44" font-size="22" font-weight="800" fill="#0b0b0b">Architecture du Mini-SOC</text>
+  <text x="40" y="68" class="s">Détecter (IDS) → collecter (ETL) → analyser (SIEM) → répondre (IPS)</text>
+
+  <!-- Zones -->
+  <rect x="30" y="110" width="300" height="300" rx="14" fill="#f4f3f0"/>
+  <text x="50" y="398" class="zone">RÉSEAU SURVEILLÉ 10.10.0.0/24</text>
+  <rect x="360" y="110" width="710" height="300" rx="14" fill="#eef4fc"/>
+  <text x="380" y="398" class="zone">PILE SOC (DOCKER COMPOSE, TLS)</text>
+
+  <!-- Attaquant -->
+  <rect class="box" x="55" y="140" width="250" height="78" rx="12"/>
+  <text x="75" y="172" class="t">Attaquant</text>
+  <text x="75" y="194" class="s">Kali · Nmap, Hydra, curl</text>
+  <rect x="55" y="140" width="6" height="78" rx="3" fill="#c62828"/>
+
+  <!-- Cible -->
+  <rect class="box" x="55" y="300" width="250" height="78" rx="12"/>
+  <text x="75" y="332" class="t">Serveur cible</text>
+  <text x="75" y="354" class="s">Ubuntu · SSH (22), web (80)</text>
+
+  <path class="flow" d="M180,218 L180,298"/>
+  <text x="192" y="255" class="lbl">scan,</text><text x="192" y="271" class="lbl">brute-force, LFI</text>
+
+  <!-- Suricata -->
+  <rect class="box" x="385" y="140" width="200" height="78" rx="12"/>
+  <text x="405" y="172" class="t">Suricata</text>
+  <text x="405" y="194" class="s">IDS · règles local.rules</text>
+  <path class="flow" d="M305,330 C345,330 345,180 383,180"/>
+  <text x="324" y="296" class="lbl" transform="rotate(-90 324 296)">copie du trafic</text>
+
+  <!-- eve.json -->
+  <rect class="box" x="385" y="300" width="200" height="78" rx="12"/>
+  <text x="405" y="332" class="t">eve.json</text>
+  <text x="405" y="354" class="s">alertes et flux en JSON</text>
+  <path class="flow" d="M485,218 L485,298"/>
+
+  <!-- Filebeat -->
+  <rect class="box" x="625" y="300" width="180" height="78" rx="12"/>
+  <text x="645" y="332" class="t">Filebeat</text>
+  <text x="645" y="354" class="s">module Suricata</text>
+  <path class="flow" d="M585,339 L623,339"/>
+
+  <!-- Elasticsearch -->
+  <rect class="box" x="845" y="300" width="200" height="78" rx="12"/>
+  <text x="865" y="332" class="t">Elasticsearch</text>
+  <text x="865" y="354" class="s">stockage · HTTPS + auth</text>
+  <path class="flow" d="M805,339 L843,339"/>
+
+  <!-- Kibana / Grafana -->
+  <rect class="box" x="845" y="140" width="200" height="78" rx="12"/>
+  <text x="865" y="172" class="t">Kibana · Grafana</text>
+  <text x="865" y="194" class="s">investigation, KPI</text>
+  <path class="flow" d="M945,300 L945,220"/>
+
+  <!-- Fail2Ban -->
+  <rect class="box" x="625" y="140" width="180" height="78" rx="12"/>
+  <text x="645" y="172" class="t">Fail2Ban</text>
+  <text x="645" y="194" class="s">IPS · sévérité 1-2</text>
+  <rect x="625" y="140" width="6" height="78" rx="3" fill="#c62828"/>
+  <path class="flow" d="M560,300 C560,250 690,260 700,220"/>
+  <text x="645" y="285" class="lbl">lit les alertes</text>
+
+  <!-- Ban -->
+  <path class="ban" d="M715,140 C715,92 190,92 180,138"/>
+  <text x="330" y="96" font-size="13" font-weight="700" fill="#c62828">bannissement iptables (tous ports) après 3 alertes graves en 10 min</text>
+
+  <text x="40" y="436" class="s">Ports Elasticsearch, Kibana et Grafana exposés sur 127.0.0.1 uniquement · secrets dans .env (non versionné)</text>
+</svg>

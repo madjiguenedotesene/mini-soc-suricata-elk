@@ -1,0 +1,31 @@
+name: CI – règles et démonstration
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Installer Suricata, Fail2Ban et Python
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q suricata fail2ban python3-pip
+          pip install -r requirements.txt
+      - name: Valider la syntaxe des règles Suricata
+        run: |
+          sudo suricata -T -c /etc/suricata/suricata.yaml -S suricata/rules/local.rules \
+            --set 'vars.address-groups.HOME_NET=[10.10.0.0/24]' -l /tmp
+      - name: Valider docker-compose
+        run: cp .env.example .env && docker compose config -q
+      - name: Démonstration hors ligne (PCAP -> Suricata -> Fail2Ban -> rapport)
+        run: ./demo/run_demo.sh
+      - name: Vérifier que chaque règle a déclenché
+        run: |
+          for sid in 1000001 1000002 1000003 1000004; do
+            grep -q "\"signature_id\":$sid" demo/output/eve.json || { echo "SID $sid absent"; exit 1; }
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rapport-demo
+          path: demo/output/

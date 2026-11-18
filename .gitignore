@@ -1,0 +1,7 @@
+.env
+demo/output/
+demo/*.pcap
+__pycache__/
+*.pyc
+.venv/
+.DS_Store

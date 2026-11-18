@@ -1,0 +1,16 @@
+# =====================================================================
+#  Mini-SOC – règles Suricata personnalisées
+#  Plage de SID locale : 1000001-1999999
+# =====================================================================
+
+# 1. Visibilité réseau : test ICMP (validation de la sonde)
+alert icmp any any -> $HOME_NET any (msg:"MINI-SOC ICMP echo vers le réseau surveillé"; itype:8; classtype:misc-activity; sid:1000001; rev:2;)
+
+# 2. Brute-force SSH : plus de 5 nouvelles connexions vers le port 22 en 60 s depuis la même source
+alert tcp any any -> $HOME_NET 22 (msg:"MINI-SOC Brute-force SSH probable"; flow:to_server; flags:S,12; threshold:type threshold, track by_src, count 5, seconds 60; classtype:attempted-admin; sid:1000002; rev:2;)
+
+# 3. Scan de ports : plus de 20 SYN en 10 s depuis la même source
+alert tcp any any -> $HOME_NET any (msg:"MINI-SOC Scan de ports TCP SYN"; flags:S,12; threshold:type both, track by_src, count 20, seconds 10; classtype:attempted-recon; sid:1000003; rev:2;)
+
+# 4. Inclusion de fichier local (LFI) dans une requête HTTP
+alert http any any -> $HOME_NET any (msg:"MINI-SOC Tentative LFI (traversée de répertoire)"; flow:established,to_server; http.uri; content:"../"; pcre:"/(\.\.\/){2,}.*(etc\/passwd|etc\/shadow|win\.ini)/i"; classtype:web-application-attack; sid:1000004; rev:2;)
