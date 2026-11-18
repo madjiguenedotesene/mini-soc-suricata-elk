@@ -2,6 +2,7 @@
 
 ![Architecture](docs/img/architecture.png)
 
+
 [![CI](https://github.com/madjiguenedotesene/mini-soc-suricata-elk/actions/workflows/ci.yml/badge.svg)](https://github.com/madjiguenedotesene/mini-soc-suricata-elk/actions/workflows/ci.yml)
 ![Suricata](https://img.shields.io/badge/IDS-Suricata%207-orange)
 ![Elastic](https://img.shields.io/badge/SIEM-Elastic%208.19-005571)
