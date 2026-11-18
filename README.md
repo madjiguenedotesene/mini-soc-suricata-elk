@@ -1,5 +1,7 @@
 # 🛡️ Mini-SOC – Détection d'intrusions et réponse automatique
 
+![Architecture](docs/img/architecture.png)
+
 [![CI](https://github.com/madjiguenedotesene/mini-soc-suricata-elk/actions/workflows/ci.yml/badge.svg)](https://github.com/madjiguenedotesene/mini-soc-suricata-elk/actions/workflows/ci.yml)
 ![Suricata](https://img.shields.io/badge/IDS-Suricata%207-orange)
 ![Elastic](https://img.shields.io/badge/SIEM-Elastic%208.19-005571)
@@ -10,7 +12,6 @@ Un **centre de supervision de sécurité** open source complet, conçu pendant m
 
 > **En une commande**, la démonstration rejoue un scénario d'attaque complet (reconnaissance → scan → brute-force SSH → inclusion de fichier) et produit la chronologie de l'incident et la fiche de réponse, sans attaquer aucune machine.
 
-![Architecture](docs/img/architecture.png)
 
 ## 📊 Résultats de la démonstration
 
